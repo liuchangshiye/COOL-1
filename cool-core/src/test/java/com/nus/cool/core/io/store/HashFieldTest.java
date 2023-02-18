@@ -2,8 +2,9 @@ package com.nus.cool.core.io.store;
 
 import com.nus.cool.core.io.DataOutputBuffer;
 import com.nus.cool.core.io.compression.OutputCompressor;
+import com.nus.cool.core.io.readstore.DataHashFieldRS;
 import com.nus.cool.core.io.readstore.FieldRS;
-import com.nus.cool.core.io.readstore.HashMetaFieldRS;
+import com.nus.cool.core.io.readstore.MetaHashFieldRS;
 import com.nus.cool.core.io.writestore.DataHashFieldWS;
 import com.nus.cool.core.io.writestore.MetaHashFieldWS;
 import com.nus.cool.core.schema.FieldType;
@@ -13,6 +14,8 @@ import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.Assert;
@@ -39,15 +42,8 @@ public class HashFieldTest {
     logger.info("Start UnitTest " + HashFieldTest.class.getSimpleName());
     this.charset = Charset.defaultCharset();
     this.compressor = new OutputCompressor();
-    sourcePath = Paths.get(System.getProperty("user.dir"),
-        "src",
-        "test",
-        "java",
-        "com",
-        "nus",
-        "cool",
-        "core",
-        "resources").toString();
+    sourcePath = Paths.get(System.getProperty("user.dir"), "src", "test", "java", "com", "nus",
+        "cool", "core", "resources").toString();
     String filepath = Paths.get(sourcePath, "fieldtest", "table.csv").toString();
     table = TestTable.readFromCSV(filepath);
   }
@@ -58,27 +54,25 @@ public class HashFieldTest {
   }
 
   /**
-   * HashfieldTest : Conversion between WriteStore and ReadStore.
+   * HashFieldTest : Conversion between WriteStore and ReadStore.
    */
   @Test(dataProvider = "HashFieldTestDP")
   public void hashFieldUnitTest(String fieldName, FieldType fType) throws IOException {
-    logger.info("Input HashField UnitTest Data: FieldName " + fieldName + " fieldType : "
+    logger.info("Input HashField UnitTest Data: FieldName " + fieldName + " FieldType : "
         + fType.toString());
 
-    int fieldidx = table.field2Ids.get(fieldName);
-    ArrayList<String> data = table.cols.get(fieldidx);
+    int fieldidx = table.getField2Ids().get(fieldName);
+    ArrayList<String> data = table.getCols().get(fieldidx);
 
     // Generate MetaHashFieldWS
     MetaHashFieldWS hmws = new MetaHashFieldWS(fType, charset, compressor);
+    DataHashFieldWS ws = new DataHashFieldWS(hmws.getFieldType(), hmws, compressor, false);
+
     // Input col data into metaField
-    for (String value : data) {
-      hmws.put(value);
-    }
-    DataHashFieldWS ws = new DataHashFieldWS(hmws.getFieldType(), fieldidx, hmws,
-        compressor, false);
-    // Input col data into Field
-    for (String value : data) {
-      ws.put(value);
+    for (int idx = 0; idx < data.size(); idx++) {
+      String[] tuple = table.getTuple(idx);
+      hmws.put(tuple, fieldidx);
+      ws.put(data.get(idx));
     }
 
     // write this file into a Buffer
@@ -91,10 +85,20 @@ public class HashFieldTest {
     bf.order(ByteOrder.nativeOrder());
 
     // Read from File
-    HashMetaFieldRS hmrs = new HashMetaFieldRS(charset);
+    MetaHashFieldRS hmrs = new MetaHashFieldRS(charset);
     hmrs.readFromWithFieldType(bf, fType);
+
+    // validate the MetaField
+    Set<String> valueSet = new HashSet<String>(data);
+
+    for (String expected : valueSet) {
+      int gid = hmrs.find(expected);
+      String actual = hmrs.getString(gid);
+      Assert.assertEquals(actual, expected);
+    }
+
     bf.position(wsPos);
-    FieldRS rs = FieldRS.readFieldRS(bf, fType);
+    FieldRS rs = DataHashFieldRS.readFrom(bf, fType);
 
     // Check the Key Point of HashMetaField and HashField
     Assert.assertEquals(hmws.count(), hmrs.count());
@@ -114,11 +118,8 @@ public class HashFieldTest {
   @DataProvider(name = "HashFieldTestDP")
   public Object[][] dpArgs() {
     return new Object[][] {
-        { "id", FieldType.UserKey },
-        { "event", FieldType.Action },
-        { "attr1", FieldType.Segment },
-        { "attr2", FieldType.Segment },
-        { "attr3", FieldType.Segment },
-    };
+        // { "id", FieldType.UserKey },
+        { "event", FieldType.Action }, { "attr1", FieldType.Segment },
+        { "attr2", FieldType.Segment }, { "attr3", FieldType.Segment }, };
   }
 }

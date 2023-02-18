@@ -28,8 +28,8 @@ import com.nus.cool.core.schema.FieldType;
 import com.nus.cool.core.schema.TableSchema;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.HashMap;
 import java.util.Map;
+import lombok.Getter;
 
 /**
  * MetaChunk read store
@@ -57,6 +57,7 @@ public class MetaChunkRS implements Input {
   /**
    * TableSchema for this meta chunk.
    */
+  @Getter
   private TableSchema schema;
 
   /**
@@ -102,7 +103,11 @@ public class MetaChunkRS implements Input {
   }
 
   /**
-   * Create and return a read store of a selected field.
+   * Get i-th MetaField and load it.
+   *
+   * @param i index of this metafield
+   * @param type type of this metafield
+   * @return MetaFieldRS
    */
   public synchronized MetaFieldRS getMetaField(int i, FieldType type) {
     // Return the meta field if it had been read before
@@ -113,22 +118,19 @@ public class MetaChunkRS implements Input {
     int fieldOffset = this.fieldOffsets[i];
     this.buffer.position(fieldOffset);
     MetaFieldRS metaField = null;
-    Map<String, Integer> invariantName2Id = new HashMap<>();
-    for (String invariantName : this.schema.getInvariantNames()) {
-      invariantName2Id.put(invariantName, this.schema.getInvariantIDFromName(invariantName));
-    }
+
     switch (type) {
       case UserKey:
-        metaField = new UserMetaFieldRS(this.charset, invariantName2Id);
+        metaField = new MetaUserFieldRS(this, this.charset);
         break;
       case AppKey:
       case Action:
       case Segment:
-        metaField = new HashMetaFieldRS(this.charset);
+        metaField = new MetaHashFieldRS(this.charset);
         break;
       case Metric:
       case ActionTime:
-        metaField = new RangeMetaFieldRS();
+        metaField = new MetaRangeFieldRS();
         break;
       default:
         throw new IllegalArgumentException("Unexpected FieldType: " + type);
@@ -139,11 +141,19 @@ public class MetaChunkRS implements Input {
   }
 
   /**
-   * Create and return a read store of a selected field.
-   */  
+   * Get the MetaField according to the fieldName in tableSchema.
+   *
+   * @param fieldName fieldName
+   * @return MetaFieldRS
+   */
   public MetaFieldRS getMetaField(String fieldName) {
     int id = this.schema.getFieldID(fieldName);
     FieldType type = this.schema.getFieldType(fieldName);
     return (id < 0 || id >= this.fieldOffsets.length) ? null : this.getMetaField(id, type);
+  }
+
+  public MetaFieldRS getMetaField(int idx) {
+    FieldType type = this.schema.getFieldType(idx);
+    return (idx < 0 || idx >= this.fieldOffsets.length) ? null : this.getMetaField(idx, type);
   }
 }

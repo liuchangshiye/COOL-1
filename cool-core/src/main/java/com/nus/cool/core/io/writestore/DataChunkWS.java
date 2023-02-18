@@ -26,13 +26,11 @@ import com.google.common.primitives.Ints;
 import com.nus.cool.core.io.Output;
 import com.nus.cool.core.io.compression.OutputCompressor;
 import com.nus.cool.core.schema.ChunkType;
-import com.nus.cool.core.schema.FieldSchema;
 import com.nus.cool.core.schema.FieldType;
 import com.nus.cool.core.schema.TableSchema;
 import com.nus.cool.core.util.IntegerUtil;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
 
 /**
  * DataChunk write store
@@ -95,35 +93,36 @@ public class DataChunkWS implements Output {
    */
   public static DataChunkWS newDataChunk(TableSchema schema, MetaFieldWS[] metaFields, int offset) {
     OutputCompressor compressor = new OutputCompressor();
-    List<FieldSchema> fieldSchemaList = schema.getFields();
-    assert fieldSchemaList.size() == metaFields.length;
-
+    int numOfFields = schema.count();
     // data chunk fields.
-    DataFieldWS[] fields = new DataFieldWS[fieldSchemaList.size()
-      - schema.getInvariantFields().size()];
-    int flag = 0;
-    for (int i = 0; i < fieldSchemaList.size(); i++) {
-      FieldSchema fieldSchema = fieldSchemaList.get(i);
-      FieldType fieldType = fieldSchema.getFieldType();
-      boolean invariantField = fieldSchema.isInvariantField();
-      if (!invariantField) {
-        switch (fieldType) {
-          case AppKey:
-          case UserKey:
-          case Action:
-          case Segment:
-            fields[flag] = new DataHashFieldWS(fieldType, i, metaFields[i], compressor,
-              fieldSchema.isPreCal());
-            flag++;
-            break;
-          case ActionTime:
-          case Metric:
-            fields[flag] = new DataRangeFieldWS(fieldType, i, compressor);
-            flag++;
-            break;
-          default:
-            throw new IllegalArgumentException("Unsupported FieldType: " + fieldType);
-        }
+    // don't have to maintain dataField for invairant Field
+    DataFieldWS[] fields = new DataFieldWS[numOfFields];
+
+    for (int i = 0; i < numOfFields; i++) {
+
+      FieldType fieldType = schema.getField(i).getFieldType();
+      switch (fieldType) {
+        case UserKey:
+        case AppKey:
+        case Action:
+        case Segment:
+          if (schema.isInvariantField(i)) {
+            fields[i] = new DataInvariantHashFieldWS(fieldType, metaFields[i]);
+          } else {
+            fields[i] = new DataHashFieldWS(fieldType, metaFields[i],
+                compressor, schema.getField(i).isPreCal());
+          }
+          break;
+        case ActionTime:
+        case Metric:
+          if (schema.isInvariantField(i)) {
+            fields[i] = new DataInvariantRangeFieldWS(fieldType);
+          } else {
+            fields[i] = new DataRangeFieldWS(fieldType, compressor);
+          }
+          break;
+        default:
+          throw new IllegalArgumentException("Unsupported FieldType: " + fieldType);
       }
     }
     return new DataChunkWS(offset, fields);

@@ -29,7 +29,6 @@ import java.util.BitSet;
 
 /**
  * Cool field read store, both hash field and range field.
- * 
  * <p>
  * hash field Layout
  * -----------------
@@ -50,8 +49,6 @@ import java.util.BitSet;
 public class CoolFieldRS implements FieldRS {
 
   private FieldType fieldType;
-
-  // private boolean bRangeField;
 
   private boolean bSetField;
 
@@ -106,12 +103,16 @@ public class CoolFieldRS implements FieldRS {
     return this.maxKey;
   }
 
-  @Override
   public boolean isSetField() {
     return this.bSetField;
   }
 
-  @Override
+  /**
+   * IO interface.
+   *
+   * @param buffer input 
+   * @param fieldType fieldtype
+   */
   public void readFromWithFieldType(ByteBuffer buffer, FieldType fieldType) {
     this.fieldType = fieldType;
     int bufGet = buffer.get();
@@ -120,7 +121,7 @@ public class CoolFieldRS implements FieldRS {
       // Range field case
       this.minKey = buffer.getInt();
       this.maxKey = buffer.getInt();
-      // this.bRangeField = true;
+      this.bSetField = false;
     } else {
       // Hash field case
       buffer.position(buffer.position() - 1);
@@ -150,4 +151,5 @@ public class CoolFieldRS implements FieldRS {
     // TODO Auto-generated method stub
     return 0;
   }
+
 }

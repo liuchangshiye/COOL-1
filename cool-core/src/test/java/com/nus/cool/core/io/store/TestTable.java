@@ -8,17 +8,25 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import lombok.Getter;
 
 /**
  * Generate TestTable from csv File simply and Generate Data for UnitTest.
  */
 public class TestTable {
-  public HashMap<String, Integer> field2Ids;
-  public ArrayList<String> fields;
-  public ArrayList<ArrayList<String>> cols;
-  public CsvTupleParser parser = null;
-  public int rowCounts;
-  public int colCounts;
+  @Getter
+  private HashMap<String, Integer> field2Ids;
+  private ArrayList<String> fields;
+
+  @Getter
+  private ArrayList<ArrayList<String>> cols;
+  private CsvTupleParser parser = null;
+
+  @Getter
+  private int rowCounts;
+
+  @Getter
+  private int colCounts;
 
   private TestTable() {
     this.field2Ids = new HashMap<String, Integer>();
@@ -30,9 +38,7 @@ public class TestTable {
   }
 
   /**
-   * Load csv data.
-   *
-   * @return new TestTable object which structured file data
+   * return new TestTable object which structured file data.
    */
   public static TestTable readFromCSV(String filepath) {
     TestTable table = new TestTable();
@@ -58,8 +64,8 @@ public class TestTable {
 
         for (int i = 0; i < table.field2Ids.size(); i++) {
           table.cols.get(i).add(vs[i]);
-          table.rowCounts += 1;
         }
+        table.rowCounts += 1;
       }
       fr.close();
     } catch (IOException e) {
@@ -69,22 +75,34 @@ public class TestTable {
   }
 
   /**
-   * Print all data.
+   * return the tuple at index idx.
+   */
+  public String[] getTuple(int idx) {
+    String[] ret = new String[this.colCounts];
+    for (int i = 0; i < this.colCounts; i++) {
+      ret[i] = this.cols.get(i).get(idx);
+    }
+    return ret;
+  }
+
+  /**
+   * Print all dataItem.
    */
   public void showTable() {
     this.tablePrint(this.rowCounts);
   }
 
   /**
-   * Print first 10 lines of data.
+   * Print first 10 line dataitem.
    */
   public void showTableHead() {
     this.tablePrint(10);
   }
 
   private void tablePrint(int rows) {
+    int rowMax = rows > this.rowCounts ? this.rowCounts : rows;
     // print header
-    
+
     System.out.println("Table:");
     String line = "|";
     for (String colheader : this.fields) {
@@ -92,14 +110,13 @@ public class TestTable {
       line += s;
     }
     line += "|";
-    
+
     int n = line.length() - 2;
     printline(n);
     System.out.println(line);
     printline(n);
-    
+
     // print value
-    int rowMax = rows > this.rowCounts ? this.rowCounts : rows;
     for (int row = 0; row < rowMax; row++) {
       line = "| ";
       for (int col = 0; col < this.colCounts; col++) {
@@ -117,4 +134,11 @@ public class TestTable {
     line = line + s + line;
     System.out.println(line);
   }
+
+  @Override
+  public String toString() {
+    return "TestTable [field2Ids=" + field2Ids + ", rowCounts=" + rowCounts + ", colCounts="
+        + colCounts + "]";
+  }
+
 }

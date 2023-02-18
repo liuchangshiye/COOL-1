@@ -1,4 +1,3 @@
-
 package com.nus.cool.core.model;
 
 import com.nus.cool.model.CoolModel;
@@ -38,11 +37,8 @@ public class CoolModelTest {
   public Object[][] cubeReloadTestDPArgObjects() {
     String sourcePath =
         Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString();
-    return new Object[][] {
-        {sourcePath, "health"},
-        {sourcePath, "sogamo"},
-        {sourcePath, "tpc-h-10g"}
-    };
+    return new Object[][] {{sourcePath, "health"}, {sourcePath, "sogamo"},
+        {sourcePath, "tpc-h-10g"}};
   }
 
   /**
@@ -52,9 +48,7 @@ public class CoolModelTest {
   public Object[][] cubeListArgObjects() {
     String sourcePath =
         Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString();
-    return new Object[][] {
-        {sourcePath, new String[] {"sogamo", "tpc-h-10g", "health"}},
-    };
+    return new Object[][] {{sourcePath, new String[] {"sogamo", "tpc-h-10g", "health"}}};
   }
 
 }

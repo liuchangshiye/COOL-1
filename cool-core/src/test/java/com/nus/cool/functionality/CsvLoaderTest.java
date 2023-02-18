@@ -16,7 +16,7 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
- * Testing csv loader.
+ * Testing csv file loading.
  */
 public class CsvLoaderTest {
   static final Logger logger = LoggerFactory.getLogger(CsvLoaderTest.class);
@@ -57,15 +57,25 @@ public class CsvLoaderTest {
     loader.load(cube, schemaFileName, dataFileName, cubeRepo);
   }
 
+  @Test(dataProvider = "CsvLoaderConsistencyTestDP", expectedExceptions = IOException.class)
+  public void csvLoaderConsistencyUnitTest(String cube, String schemaFileName, String dataFileName,
+                                           String cubeRepo) throws IOException {
+    DataLoaderConfig config = new CsvDataLoaderConfig();
+    CoolLoader loader = new CoolLoader(config);
+    loader.load(cube, schemaFileName, dataFileName, cubeRepo);
+  }
+
   /**
    * Data provider.
    */
   @DataProvider(name = "CsvLoaderTestDP")
   public Object[][] csvLoaderTestDPArgObjects() {
-    return new Object[][] {{"health",
+    return new Object[][] {
+        {"health",
         Paths.get(System.getProperty("user.dir"), "..", "datasets/health", "table.yaml").toString(),
         Paths.get(System.getProperty("user.dir"), "..", "datasets/health", "data.csv").toString(),
-        Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString()}, {"sogamo",
+        Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString()},
+        {"sogamo",
         Paths.get(System.getProperty("user.dir"), "..", "datasets/sogamo", "table.yaml").toString(),
         Paths.get(System.getProperty("user.dir"), "..", "datasets/sogamo", "data.csv").toString(),
         Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString()},
@@ -90,6 +100,19 @@ public class CsvLoaderTest {
             Paths.get(System.getProperty("user.dir"), "..", "datasets/fraud_case",
                 "data.csv").toString(),
             Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString()}};
+  }
+
+  /**
+   * Data provider.
+   */
+  @DataProvider(name = "CsvLoaderConsistencyTestDP")
+  public Object[][] csvLoaderTestDPAssertArgObjects() {
+    return new Object[][] {{"health_raw",
+        Paths.get(System.getProperty("user.dir"), "..", "datasets/health_raw",
+            "error_table.yaml").toString(),
+        Paths.get(System.getProperty("user.dir"), "..", "datasets/health_raw",
+            "data.csv").toString(),
+        Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString()}};
   }
 
   /**

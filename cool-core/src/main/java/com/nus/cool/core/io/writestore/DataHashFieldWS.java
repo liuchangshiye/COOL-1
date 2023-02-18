@@ -19,7 +19,6 @@
 
 package com.nus.cool.core.io.writestore;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.Lists;
@@ -41,8 +40,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Hash-like indexed field, used to store chunk data for four fieldTypes,
- *  including AppKey, UserKey, Action, Segment.
+ * Hash-like indexed field, used to store chunk data for four fieldTypes.
+ * including AppKey, UserKey,
+ * Action, Segment
  * <p>
  * Data Layout
  * -----------------
@@ -53,11 +53,6 @@ import java.util.Map;
  * (compressed) values = column data, stored as localIDs (compressed)
  */
 public class DataHashFieldWS implements DataFieldWS {
-
-  /**
-   * Field index to get data from tuple.
-   */
-  // private final int fieldIndex;
 
   private final MetaFieldWS metaField;
 
@@ -81,12 +76,12 @@ public class DataHashFieldWS implements DataFieldWS {
 
   /**
    * Construct a write store of string fields for data chunk.
+   *
+   * @param preCal is preCalculated
    */
-  public DataHashFieldWS(FieldType fieldType, int fieldIndex, MetaFieldWS metaField,
-      OutputCompressor compressor, boolean preCal) {
-    checkArgument(fieldIndex >= 0);
+  public DataHashFieldWS(FieldType fieldType, MetaFieldWS metaField, OutputCompressor compressor,
+      boolean preCal) {
     this.fieldType = fieldType;
-    // this.fieldIndex = fieldIndex;
     this.metaField = checkNotNull(metaField);
     this.compressor = checkNotNull(compressor);
     this.preCal = preCal;
@@ -146,13 +141,14 @@ public class DataHashFieldWS implements DataFieldWS {
         }
       }
     }
-    // System.out.println(value);
+
     // Write compressed key vector (unique global id)
     int min = ArrayUtil.min(key);
     int max = ArrayUtil.max(key);
     int count = key.length;
     int rawSize = count * Ints.BYTES;
     Histogram hist = Histogram.builder()
+        .sorted(true)
         .min(min)
         .max(max)
         .numOfValues(count)
@@ -182,7 +178,8 @@ public class DataHashFieldWS implements DataFieldWS {
       count = value.length;
       rawSize = count * Ints.BYTES;
       hist = Histogram.builder()
-          .sorted(this.fieldType == FieldType.AppKey || this.fieldType == FieldType.UserKey)
+          // .sorted(this.fieldType == FieldType.AppKey || this.fieldType ==
+          // FieldType.UserKey)
           .min(min)
           .max(max)
           .numOfValues(count)

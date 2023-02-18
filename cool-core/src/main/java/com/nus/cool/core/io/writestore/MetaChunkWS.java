@@ -33,9 +33,7 @@ import com.nus.cool.core.util.IntegerUtil;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import lombok.Getter;
 
 /**
@@ -63,13 +61,16 @@ public class MetaChunkWS implements Output {
 
   private int offset;
 
-  private final int userKeyIndex;
+  // private final int userKeyIndex;
 
-  @Getter
-  private List<Integer> invariantFieldIndex = new ArrayList<>();
+  // @Getter
+  // private List<Integer> invariantFieldIndex = new ArrayList<>();
 
   @Getter
   private final MetaFieldWS[] metaFields;
+
+  @Getter
+  private TableSchema tableSchema;
 
   /**
    * Constructor.
@@ -77,10 +78,8 @@ public class MetaChunkWS implements Output {
    * @param offset     Offset in out stream
    * @param metaFields fields type for each file of the meta chunk
    */
-  public MetaChunkWS(int offset, MetaFieldWS[] metaFields, int userKeyIndex,
-      List<Integer> invariantFieldIndex) {
-    this.userKeyIndex = userKeyIndex;
-    this.invariantFieldIndex = invariantFieldIndex;
+  public MetaChunkWS(int offset, MetaFieldWS[] metaFields, TableSchema schema) {
+    this.tableSchema = schema;
     this.metaFields = checkNotNull(metaFields);
     checkArgument(offset >= 0 && metaFields.length > 0);
     this.offset = offset;
@@ -93,22 +92,21 @@ public class MetaChunkWS implements Output {
    * @param offset Offset begin to write metaChunk.
    * @return MetaChunkWS instance
    */
-  public static MetaChunkWS newMetaChunkWS(TableSchema schema, int offset, int userKeyIndex,
-      List<Integer> invariantFieldIndex) {
+  public static MetaChunkWS newMetaChunkWS(TableSchema schema, int offset) {
     OutputCompressor compressor = new OutputCompressor();
     Charset charset = Charset.forName(schema.getCharset());
 
     // n: it denotes the number of columns
     int n = schema.getFields().size();
     MetaFieldWS[] metaFields = new MetaFieldWS[n];
+    MetaChunkWS metaChunk = new MetaChunkWS(offset, metaFields, schema);
     for (int i = 0; i < metaFields.length; i++) {
       FieldSchema fieldSchema = schema.getField(i);
       FieldType fieldType = fieldSchema.getFieldType();
 
       switch (fieldType) {
         case UserKey:
-          metaFields[i] = new MetaUserFieldWS(fieldType, charset, compressor,
-            schema.getInvariantSize());
+          metaFields[i] = new MetaUserFieldWS(fieldType, charset, compressor, metaChunk);
           break;
         case AppKey:
         case Action:
@@ -123,7 +121,7 @@ public class MetaChunkWS implements Output {
           throw new IllegalArgumentException("Invalid field type: " + fieldType);
       }
     }
-    return new MetaChunkWS(offset, metaFields, userKeyIndex, invariantFieldIndex);
+    return metaChunk;
   }
 
   /**
@@ -131,21 +129,20 @@ public class MetaChunkWS implements Output {
    *
    * @param tuple Plain data line
    */
-  public void put(String[] tuple, List<FieldType> invariantType) {
+  public void put(String[] tuple) {
     checkNotNull(tuple);
+    checkArgument(tuple.length == this.tableSchema.getFields().size(),
+        "input tuple's size is not equal to table schema's size");
+    int userKeyIdx = this.tableSchema.getUserKeyFieldIdx();
     for (int i = 0; i < tuple.length; i++) {
-      if (userKeyIndex == i) {
-        List<String> userData = new ArrayList<>();
-        userData.add(tuple[userKeyIndex]);
-        for (int j = 0; j < invariantFieldIndex.size(); j++) {
-          userData.add(tuple[invariantFieldIndex.get(i)]);
-        }
-        ((MetaUserFieldWS) this.metaFields[i]).put(
-            (String[]) userData.toArray(new String[0]), invariantType);
-      } else {
-        this.metaFields[i].put(tuple[i]);
+      if (i == userKeyIdx) {
+        continue;
       }
+      this.metaFields[i].put(tuple, i);
     }
+    // the user key meta field should be updated at last 
+    // as it needs the globalId of values from other meta field
+    this.metaFields[userKeyIdx].put(tuple, userKeyIdx);
   }
 
   /**
@@ -208,7 +205,12 @@ public class MetaChunkWS implements Output {
   }
 
   /**
-   * Write out cube meta information. 
+   * write CubeMeta (complete should be called first).
+   *
+   * @param out dataoutput
+   * @return success or fail
+   *
+   * @throws IOException write error
    */
   public int writeCubeMeta(DataOutput out) throws IOException {
     this.offset = 0;
@@ -251,7 +253,7 @@ public class MetaChunkWS implements Output {
   }
 
   /**
-   * Update beginning offset.
+   * Update beginning offset to write.
    *
    * @param newOffset new offset to write metaChunk
    */

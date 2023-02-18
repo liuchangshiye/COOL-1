@@ -34,19 +34,25 @@ import java.nio.ShortBuffer;
  */
 public class ZInt16Store implements ZIntStore, InputVector {
 
-  private int count;
+  private final int count;
+
+  private final boolean sorted;
 
   private ShortBuffer buffer;
 
-  public ZInt16Store(int count) {
+  public ZInt16Store(int count, boolean sorted) {
     this.count = count;
+    this.sorted = sorted;
   }
 
   /**
    * Create input vector on a buffer that is ZInt16 encoded.
    */
-  public static ZIntStore load(ByteBuffer buffer, int n) {
-    ZIntStore store = new ZInt16Store(n);
+  public static ZIntStore load(ByteBuffer buffer) {
+    int n = buffer.getInt();
+    int flag = buffer.get(); // get byte into int
+    boolean sorted = flag == 1 ? true : false;
+    ZIntStore store = new ZInt16Store(n, sorted);
     store.readFrom(buffer);
     return store;
   }
@@ -61,7 +67,11 @@ public class ZInt16Store implements ZIntStore, InputVector {
     if (key > Short.MAX_VALUE || key < 0) {
       return -1;
     }
-    return ShortBuffers.binarySearchUnsigned(this.buffer, 0, this.buffer.limit(), (short) key);
+    if (this.sorted) {
+      return ShortBuffers.binarySearchUnsigned(this.buffer, 0, this.buffer.limit(), (short) key);
+    } else {
+      return ShortBuffers.traverseSearch(this.buffer, 0, this.buffer.limit(), (short) key);
+    }
   }
 
   @Override

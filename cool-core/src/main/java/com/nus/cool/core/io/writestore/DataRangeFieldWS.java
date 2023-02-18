@@ -19,7 +19,6 @@
 
 package com.nus.cool.core.io.writestore;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.primitives.Ints;
@@ -57,10 +56,9 @@ public class DataRangeFieldWS implements DataFieldWS {
   private final OutputCompressor compressor;
 
   /**
-   * Create a write store of int field for data chunk. 
+   * Create a write store of int field for data chunk.
    */
-  public DataRangeFieldWS(FieldType fieldType, int fieldIndex, OutputCompressor compressor) {
-    checkArgument(fieldIndex >= 0); // Field index to get data from tuple.
+  public DataRangeFieldWS(FieldType fieldType, OutputCompressor compressor) {
     this.fieldType = fieldType;
     this.compressor = checkNotNull(compressor);
   }
@@ -71,12 +69,15 @@ public class DataRangeFieldWS implements DataFieldWS {
   }
 
   /**
-   * UnitTest insert data.
+   * insert value.
+   *
+   * @param tupleValue value
+   * @throws IOException when string convert fail
    */
   @Override
   public void put(String tupleValue) throws IOException {
     if (this.fieldType == FieldType.ActionTime) {
-      DayIntConverter converter = new DayIntConverter();
+      DayIntConverter converter = DayIntConverter.getInstance();
       this.buffer.writeInt(converter.toInt(tupleValue));
     } else {
       this.buffer.writeInt(Integer.parseInt(tupleValue));

@@ -42,10 +42,8 @@ public class NativeDataWriter implements DataWriter {
 
   // below are variables describing the dataset building context
 
-  // initialzied once.
+  // initialzied once
   private int userKeyIndex;
-
-  private List<Integer> invariantFieldIndex = new ArrayList<>();
 
   private MetaChunkWS metaChunk;
 
@@ -68,8 +66,8 @@ public class NativeDataWriter implements DataWriter {
     if (initalized) {
       return true;
     }
-    this.userKeyIndex = tableSchema.getUserKeyField();
-    this.invariantFieldIndex = tableSchema.getInvariantFields();
+    this.userKeyIndex = tableSchema.getUserKeyFieldIdx();
+
     // when there is no user key, using any field for the additional condition on
     // chunk switch is ok.
     if (this.userKeyIndex == -1) {
@@ -78,8 +76,7 @@ public class NativeDataWriter implements DataWriter {
     // cublet
     // create metaChunk instance, default offset to be 0, update offset when write
     // later.
-    this.metaChunk = MetaChunkWS.newMetaChunkWS(this.tableSchema, 0,
-        userKeyIndex, invariantFieldIndex);
+    this.metaChunk = MetaChunkWS.newMetaChunkWS(this.tableSchema, 0);
     this.out = newCublet();
     // chunk
     this.tupleCount = 0;
@@ -170,8 +167,7 @@ public class NativeDataWriter implements DataWriter {
   @Override
   public boolean add(Object tuple) throws IOException {
     if (!(tuple instanceof String[])) {
-      System.out.println(
-          "Unexpected tuple type: tuple not in valid type for DataWriter");
+      System.out.println("Unexpected tuple type: tuple not in valid type for DataWriter");
       return false;
     }
     String[] insertTuple = (String[]) tuple;
@@ -185,11 +181,8 @@ public class NativeDataWriter implements DataWriter {
     }
     lastUser = curUser;
     // update metachunk / metafield
-    metaChunk.put(insertTuple, tableSchema.getInvariantType());
+    metaChunk.put(insertTuple);
     List<String> dataArray = new ArrayList<String>(Arrays.asList(insertTuple));
-    for (int i = invariantFieldIndex.size() - 1; i >= 0; i--) {
-      dataArray.remove((int) invariantFieldIndex.get(i));
-    }
     dataChunk.put((String[]) dataArray.toArray(new String[0]));
     // update data chunk
     tupleCount++;
@@ -202,8 +195,7 @@ public class NativeDataWriter implements DataWriter {
     }
     String fileName = "cubemeta";
     File cubemeta = new File(outputDir, fileName);
-    DataOutputStream out = new DataOutputStream(
-        new FileOutputStream(cubemeta));
+    DataOutputStream out = new DataOutputStream(new FileOutputStream(cubemeta));
     offset = 0;
     metaChunk.writeCubeMeta(out);
     out.flush();

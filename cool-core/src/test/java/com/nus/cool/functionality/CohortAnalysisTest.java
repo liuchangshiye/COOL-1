@@ -1,110 +1,130 @@
-// package com.nus.cool.functionality;
-//
-// import com.fasterxml.jackson.databind.ObjectMapper;
-// import com.nus.cool.core.cohort.ExtendedCohortQuery;
-// import com.nus.cool.core.io.readstore.CubeRS;
-// import com.nus.cool.core.io.storevector.InputVector;
-// import com.nus.cool.model.CoolModel;
-// import com.nus.cool.result.ExtendedResultTuple;
-// import org.slf4j.Logger;
-// import org.slf4j.LoggerFactory;
-// import org.testng.Assert;
-// import org.testng.annotations.AfterTest;
-// import org.testng.annotations.BeforeTest;
-// import org.testng.annotations.DataProvider;
-// import org.testng.annotations.Test;
-//
-// import java.io.File;
-// import java.io.IOException;
-// import java.nio.file.Paths;
-// import java.util.ArrayList;
-// import java.util.List;
-//
-// public class CohortAnalysisTest extends CohortSelectionTest {
-// static final Logger logger =
-// LoggerFactory.getLogger(CohortAnalysisTest.class);
-//
-// @BeforeTest
-// public void setUp() {
-// logger.info("Start UnitTest " + CohortAnalysisTest.class.getSimpleName());
-// }
-//
-// @AfterTest
-// public void tearDown() {
-// logger.info(String.format("Tear Down UnitTest %s\n",
-// CohortAnalysisTest.class.getSimpleName()));
-// }
-//
-// @Test(dataProvider = "CohortAnalysisTestDP",
-// dependsOnMethods="CohortSelectionUnitTest")
-// public void CohortAnalysisUnitTest(String datasetPath, String queryPath,
-// List<ExtendedResultTuple> out) throws IOException {
-// ObjectMapper mapper = new ObjectMapper();
-// ExtendedCohortQuery query = mapper.readValue(new File(queryPath),
-// ExtendedCohortQuery.class);
-//
-// String inputSource = query.getDataSource();
-// CoolModel coolModel = new CoolModel(datasetPath);
-// coolModel.reload(inputSource);
-//
-// if (!query.isValid())
-// throw new IOException("[x] Invalid cohort query.");
-//
-// CubeRS inputCube = coolModel.getCube(query.getDataSource());
-// String inputCohort = query.getInputCohort();
-// if (inputCohort != null) {
-// coolModel.loadCohorts(inputCohort, inputSource);
-// }
-// InputVector userVector = coolModel.getCohortUsers(inputCohort);
-// List<ExtendedResultTuple> result =
-// coolModel.cohortEngine.performCohortQuery(inputCube, userVector, query);
-// if (!out.isEmpty()){
-// Assert.assertEquals(result, out);
-// }
-// }
-//
-// @DataProvider(name = "CohortAnalysisTestDP")
-// public Object[][] CohortAnalysisTestDPArgObjects() {
-// List<ExtendedResultTuple> out1 = new ArrayList<>();
-// out1.add(new ExtendedResultTuple("((1970, 1980])", 0, 3.0, 22.0, 22.0, 22.0,
-// 1.0));
-// out1.add(new ExtendedResultTuple("((1970, 1980])", 1, 1.0, 31.0, 31.0, 31.0,
-// 1.0));
-// out1.add(new ExtendedResultTuple("((1970, 1980])", 2, 1.0, 37.0, 37.0, 37.0,
-// 1.0));
-// out1.add(new ExtendedResultTuple("((1970, 1980])", 3, 1.0, 1.0, 1.0, 1.0,
-// 1.0));
-// out1.add(new ExtendedResultTuple("((1980, 1990])", 0, 2.0, 0.0, 0.0, 0.0,
-// 0.0));
-// out1.add(new ExtendedResultTuple("((1990, 2000))", 0, 2.0, 29.0, 29.0, 29.0,
-// 1.0));
-// out1.add(new ExtendedResultTuple("((1990, 2000))", 1, 1.0, 55.0, 55.0, 55.0,
-// 1.0));
-// out1.add(new ExtendedResultTuple("((1990, 2000))", 2, 1.0, 10.0, 10.0, 10.0,
-// 1.0));
-//
-// List<ExtendedResultTuple> out2 = new ArrayList<>();
-// out2.add(new ExtendedResultTuple("((1970, 1980])", 0, 1.0, 0.0, 0.0, 0.0,
-// 0.0));
-// out2.add(new ExtendedResultTuple("((1980, 1990])", 0, 1.0, 0.0, 0.0, 0.0,
-// 0.0));
-// out2.add(new ExtendedResultTuple("((1990, 2000))", 0, 1.0, 0.0, 0.0, 0.0,
-// 0.0));
-// out2.add(new ExtendedResultTuple("((1990, 2000))", 1, 1.0, 55.0, 55.0, 55.0,
-// 1.0));
-//
-// return new Object[][] {
-// {
-// Paths.get(System.getProperty("user.dir"), "..", "CubeRepo").toString(),
-// Paths.get(System.getProperty("user.dir"), "..", "datasets/health",
-// "query2.json").toString(),
-// out1
-// },{
-// Paths.get(System.getProperty("user.dir"), "..", "CubeRepo").toString(),
-// Paths.get(System.getProperty("user.dir"), "..", "datasets/health",
-// "query1-1.json").toString(),
-// out2
-// }
-// };
-// }
-// }
+package com.nus.cool.functionality;
+
+import static com.nus.cool.functionality.CohortAnalysis.performCohortAnalysis;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nus.cool.core.cohort.storage.CohortRet;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testng.Assert;
+import org.testng.annotations.AfterTest;
+import org.testng.annotations.BeforeTest;
+import org.testng.annotations.DataProvider;
+import org.testng.annotations.Test;
+
+/**
+ * Testing cohort selection.
+ */
+public class CohortAnalysisTest {
+  static final Logger logger = LoggerFactory.getLogger(CohortAnalysisTest.class);
+
+  @BeforeTest
+  public void setUp() {
+    logger.info("Start UnitTest " + CohortAnalysisTest.class.getSimpleName());
+  }
+
+  @AfterTest
+  public void tearDown() {
+    logger.info(
+        String.format("Tear Down UnitTest %s\n", CohortAnalysisTest.class.getSimpleName()));
+  }
+
+  @Test(dataProvider = "cohortAnalysisTestDP", dependsOnMethods = {
+      "com.nus.cool.functionality.CsvLoaderTest.csvLoaderUnitTest"})
+  public void cohortSelectionUnitTest(String cubeRepo, String queryPath, String queryResultPath)
+      throws IOException {
+    CohortRet ret = performCohortAnalysis(cubeRepo, queryPath);
+
+    // validate the results
+    ObjectMapper mapper = new ObjectMapper();
+    // HashMap<String, List<Integer>> cohortData = mapper.readValue(new
+    // File(queryResultPath), HashMap.class);
+    HashMap<String, List<Integer>> cohortData = mapper.readValue(new File(queryResultPath),
+        new TypeReference<HashMap<String, List<Integer>>>() {
+        });
+    // check the result
+    // System.out.println(ret.toString());
+    // validate the cohortName
+    Assert.assertEquals(ret.getCohortList().size(), cohortData.size());
+
+    // System.out.println(ret.getCohortList());
+    for (String cohortName : ret.getCohortList()) {
+      Assert.assertTrue(cohortData.containsKey(cohortName));
+      // System.out.printf("True Result %s\n", cohortData.get(cohortName).toString());
+      // System.out.printf("Get Result %s\n", ret.getValuesByCohort(cohortName));
+      Assert.assertEquals(cohortData.get(cohortName), ret.getValuesByCohort(cohortName));
+    }
+  }
+
+  @Test(dataProvider = "cohortAnalysisWithInputCohortTestDP", dependsOnMethods = {
+      "com.nus.cool.functionality.CsvLoaderTest.csvLoaderUnitTest",
+      "com.nus.cool.functionality.CohortSelectionTest.cohortSelectionUnitTest"})
+  public void cohortSelectionWithInputCohortUnitTest(String cubeRepo, String queryPath
+                                                     ) throws IOException {
+    CohortRet ret = performCohortAnalysis(cubeRepo, queryPath);
+    System.out.println(ret);
+  }
+
+  /**
+   * Data provider for cohort analysis without input cohort.
+   */
+  @DataProvider(name = "cohortAnalysisTestDP")
+  public Object[][] cohortAnalysisTestDPArgObjects() {
+    String cubeRepo = Paths.get(System.getProperty("user.dir"), "..",
+        "CubeRepo/TestCube").toString();
+    return new Object[][] {
+        // ecommerce
+        {cubeRepo,
+            "../datasets/ecommerce_query/sample_query/query.json",
+            "../datasets/ecommerce_query/sample_query/query_result.json"},
+        // heath_raw
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_distinctcount/query.json",
+            "../datasets/health_raw/sample_query_distinctcount/query_result.json"},
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_count/query.json",
+            "../datasets/health_raw/sample_query_count/query_result.json"},
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_average/query.json",
+            "../datasets/health_raw/sample_query_average/query_result.json"},
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_max/query.json",
+            "../datasets/health_raw/sample_query_max/query_result.json"},
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_min/query.json",
+            "../datasets/health_raw/sample_query_min/query_result.json"},
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_sum/query.json",
+            "../datasets/health_raw/sample_query_sum/query_result.json"},
+        // fraud_case
+        {cubeRepo,
+            "../datasets/fraud_case/sample_query_login_count/query.json",
+            "../datasets/fraud_case/sample_query_login_count/query_result.json"},
+        // health
+        {cubeRepo,
+            "../datasets/health/sample_query_distinctcount/query.json",
+            "../datasets/health/sample_query_distinctcount/query_result.json"}
+    };
+  }
+
+  /**
+   * Data provider for cohort analysis with input cohort.
+   */
+  @DataProvider(name = "cohortAnalysisWithInputCohortTestDP")
+  public Object[][] cohortAnalysisWithInputCohortTestDPArgObjects() {
+    String cubeRepo = Paths.get(System.getProperty("user.dir"), "..",
+        "CubeRepo/TestCube").toString();
+    return new Object[][] {
+        // heath_raw
+        {cubeRepo,
+            "../datasets/health_raw/sample_query_with_inputcohort/query.json"},
+
+    };
+  }
+}

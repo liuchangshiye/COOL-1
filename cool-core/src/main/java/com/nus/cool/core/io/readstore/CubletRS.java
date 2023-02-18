@@ -78,7 +78,7 @@ public class CubletRS implements Input {
   }
 
   /**
-   * Deserialize a cublet from a byte buffer.
+   * deserialize a cublet from a byte buffer.
    */
   @Override
   public void readFrom(ByteBuffer buffer) {
@@ -94,13 +94,13 @@ public class CubletRS implements Input {
     } else {
       // if offset is not got from last one byte, read two bytes
       buffer.position(end - Ints.BYTES - Ints.BYTES);
-      final int size = buffer.getInt();
+      int size = buffer.getInt();
       buffer.position(end - Ints.BYTES - Ints.BYTES - Ints.BYTES);
       end = buffer.getInt();
       buffer.position(end - Ints.BYTES);
       headOffset = buffer.getInt();
       buffer.position(end);
-      for (int i = 0; i < size; i++) {
+      for (; size > 0; size--) {
         this.bitSets.add(SimpleBitSetCompressor.read(buffer));
       }
     }
@@ -125,9 +125,10 @@ public class CubletRS implements Input {
       buffer.position(chunkOffsets[i]);
       chunkHeadOffset = buffer.getInt();
       buffer.position(chunkHeadOffset);
-      ChunkRS chunk = new ChunkRS(this.schema);
+      ChunkRS chunk = new ChunkRS(this.schema, this.metaChunk);
       chunk.readFrom(buffer);
       this.dataChunks.add(chunk);
     }
+
   }
 }

@@ -12,7 +12,7 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
- * Testing ZIntBit input vector. 
+ * Testing ZIntBit input vector.
  */
 public class ZIntBitInputVectorTest {
   @Test(dataProvider = "ZIntBitDP")
@@ -21,12 +21,8 @@ public class ZIntBitInputVectorTest {
     int max = ArrayUtil.max(numbers);
     int count = numbers.length;
 
-    Histogram hist = Histogram.builder()
-        .min(min)
-        .max(max)
-        .numOfValues(count)
-        .type(CompressType.KeyHash)
-        .build();
+    Histogram hist = Histogram.builder().min(min).max(max).numOfValues(count)
+        .type(CompressType.KeyHash).build();
     Compressor compressor = new ZIntBitCompressor(hist);
     int maxLen = compressor.maxCompressedLength();
     byte[] compressed = new byte[maxLen];

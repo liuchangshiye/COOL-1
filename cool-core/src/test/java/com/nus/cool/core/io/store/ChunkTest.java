@@ -6,23 +6,17 @@ import com.nus.cool.core.io.readstore.ChunkRS;
 import com.nus.cool.core.io.readstore.FieldRS;
 import com.nus.cool.core.io.readstore.MetaChunkRS;
 import com.nus.cool.core.io.readstore.MetaFieldRS;
-import com.nus.cool.core.io.storevector.InputVector;
 import com.nus.cool.core.io.writestore.DataChunkWS;
 import com.nus.cool.core.io.writestore.MetaChunkWS;
 import com.nus.cool.core.schema.FieldSchema;
 import com.nus.cool.core.schema.FieldType;
 import com.nus.cool.core.schema.TableSchema;
 import com.nus.cool.core.util.converter.DayIntConverter;
-import com.nus.cool.core.util.parser.CsvTupleParser;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.Assert;
@@ -51,40 +45,27 @@ public class ChunkTest {
   @Test(dataProvider = "ChunkUnitTestDP")
   public void chunkUnitTest(String dirPath) throws IOException {
     logger.info("Input Chunk UnitTest Data: DataPath " + dirPath);
-    // Load Yaml Config
-    String yamlFilePath = Paths.get(dirPath, "table.yaml").toString();
-    File yamlFile = new File(yamlFilePath);
-    TableSchema schemas = TableSchema.read(yamlFile);
 
-    // Load CSV file, in ArrayList
-    ArrayList<String[]> data = new ArrayList<>();
-    String csvFilePath = Paths.get(dirPath, "table.csv").toString();
-    // File
-    BufferedReader br = new BufferedReader(new FileReader(new File(csvFilePath)));
-    String line;
-    CsvTupleParser parser = new CsvTupleParser();
-    while ((line = br.readLine()) != null) {
-      String[] vec = parser.parse(line);
-      data.add(vec);
-    }
-    int userKeyIndex = schemas.getUserKeyField();
-    List<Integer> invariantFieldIndex = schemas.getInvariantFields();
+    TestTable table = Utils.loadTable(dirPath);
+    TableSchema schemas = Utils.loadSchema(dirPath);
+
     // Generate MetaChunkWS
-    MetaChunkWS metaChunkWS = MetaChunkWS.newMetaChunkWS(schemas, 0, userKeyIndex,
-        invariantFieldIndex);
+    MetaChunkWS metaChunkWS = MetaChunkWS.newMetaChunkWS(schemas, 0);
     DataChunkWS chunkWS = DataChunkWS.newDataChunk(schemas, metaChunkWS.getMetaFields(), 0);
 
-    for (int i = 0; i < data.size(); i++) {
+    for (int i = 0; i < table.getRowCounts(); i++) {
       // You have to update meta first,
       // you have to update globalId first
-      metaChunkWS.put(data.get(i), schemas.getInvariantType());
-      chunkWS.put(data.get(i));
+      String[] tuple = table.getTuple(i);
+      metaChunkWS.put(tuple);
+      chunkWS.put(tuple);
     }
+
     // We create two Buffer, one for chunkWS, another for metaChunkWS
     DataOutputBuffer chunkDOB = new DataOutputBuffer();
     DataOutputBuffer metaDOB = new DataOutputBuffer();
     final int chunkPOS = chunkWS.writeTo(chunkDOB);
-    int metaPOS = metaChunkWS.writeTo(metaDOB);
+    final int metaPOS = metaChunkWS.writeTo(metaDOB);
 
     // ReadFrom
     ByteBuffer metaBF = ByteBuffer.wrap(metaDOB.getData());
@@ -94,6 +75,7 @@ public class ChunkTest {
 
     // decode these data
     MetaChunkRS metaChunkRS = new MetaChunkRS(schemas);
+    ChunkRS chunkRS = new ChunkRS(schemas, metaChunkRS);
     // Note: we should decode the headerOffset first
     metaBF.position(metaPOS - Ints.BYTES);
     int metaHeaderOffset = metaBF.getInt();
@@ -102,15 +84,13 @@ public class ChunkTest {
     chunkBF.position(chunkPOS - Ints.BYTES);
     int chunkHeaderOffset = chunkBF.getInt();
     chunkBF.position(chunkHeaderOffset);
-    ChunkRS chunkRS = new ChunkRS(schemas);
     chunkRS.readFrom(chunkBF);
-    ArrayList<ArrayList<String>> colTable = toColumnLayout(data);
-    // Check Record Size
-    Assert.assertEquals(chunkRS.getRecords(), data.size(), "Field Record Size");
 
-    int colSize = schemas.getFields().size();
-    for (int i = 0; i < colSize; i++) {
-      ArrayList<String> fieldValue = colTable.get(i);
+    // Check Record Size
+    Assert.assertEquals(chunkRS.getRecords(), table.getRowCounts(), "Field Record Size");
+
+    for (int i = 0; i < table.getColCounts(); i++) {
+      ArrayList<String> fieldValue = table.getCols().get(i);
       FieldSchema fschema = schemas.getField(i);
       FieldRS fieldRS = chunkRS.getField(fschema.getName());
       MetaFieldRS metaFieldRS = metaChunkRS.getMetaField(fschema.getName());
@@ -124,49 +104,16 @@ public class ChunkTest {
    */
   @DataProvider(name = "ChunkUnitTestDP")
   public Object[][] chunkUnitTestDP() {
-    String sourcePath = Paths.get(System.getProperty("user.dir"),
-        "src",
-        "test",
-        "java",
-        "com",
-        "nus",
-        "cool",
-        "core",
-        "resources").toString();
+    String sourcePath = Paths.get(System.getProperty("user.dir"), "src", "test", "java", "com",
+        "nus", "cool", "core", "resources").toString();
     String healthPath = Paths.get(sourcePath, "health").toString();
     String tpchPath = Paths.get(sourcePath, "olap-tpch").toString();
     String sogamoPath = Paths.get(sourcePath, "sogamo").toString();
 
-    return new Object[][] {
-        { healthPath },
-        { tpchPath },
-        { sogamoPath },
-    };
+    return new Object[][] { { healthPath }, { tpchPath }, { sogamoPath }, };
   }
 
   // ------------------------------ Helper Function -----------------------------
-  // //
-
-  /**
-   * The loaded data is stored in rows, transfer to column layout.
-   *
-   * @return loaded data stored in column layout
-   */
-  private ArrayList<ArrayList<String>> toColumnLayout(ArrayList<String[]> data) {
-    ArrayList<ArrayList<String>> res = new ArrayList<>();
-
-    for (int i = 0; i < data.size(); i++) {
-      for (int j = 0; j < data.get(0).length; j++) {
-
-        if (i == 0) {
-          res.add(new ArrayList<String>());
-        }
-        res.get(j).add(data.get(i)[j]);
-      }
-    }
-
-    return res;
-  }
 
   /**
    * Check Weather the decoded Field is correct.
@@ -174,32 +121,25 @@ public class ChunkTest {
    * @return True, correct Field or False something wrong
    */
   private Boolean isFieldCorrect(MetaFieldRS metaFieldRS, FieldRS fieldRS,
-      ArrayList<String> fieldValue) {
-    if (fieldRS.isSetField()) {
+      ArrayList<String> valueList) {
+    if (FieldType.isHashType(fieldRS.getFieldType())) {
       // HashField
-      InputVector local2Gloabl = fieldRS.getKeyVector();
-      InputVector vec = fieldRS.getValueVector();
-
-      for (int i = 0; i < vec.size(); i++) {
-        int localID = vec.get(i);
-        int globalID = local2Gloabl.get(localID);
-        String actual = metaFieldRS.getString(globalID);
-
-        if (!actual.equals(fieldValue.get(i))) {
+      for (int i = 0; i < valueList.size(); i++) {
+        int gid = fieldRS.getValueByIndex(i);
+        String actual = metaFieldRS.getString(gid);
+        if (!actual.equals(valueList.get(i))) {
           return false;
         }
       }
     } else {
       // RangeField
-      InputVector vec = fieldRS.getValueVector();
-      DayIntConverter convertor = new DayIntConverter();
-      for (int i = 0; i < vec.size(); i++) {
-        String expect = fieldValue.get(i);
+      DayIntConverter convertor = DayIntConverter.getInstance();
+      for (int i = 0; i < valueList.size(); i++) {
+        String expect = valueList.get(i);
         if (fieldRS.getFieldType() == FieldType.ActionTime) {
           expect = Integer.toString(convertor.toInt(expect));
         }
-        String actual = Integer.toString(vec.get(i));
-
+        String actual = Integer.toString(fieldRS.getValueByIndex(i));
         if (!actual.equals(expect)) {
           return false;
         }

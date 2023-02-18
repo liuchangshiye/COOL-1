@@ -4,8 +4,8 @@ import com.nus.cool.core.cohort.KeyFieldIterator;
 import com.nus.cool.core.io.readstore.ChunkRS;
 import com.nus.cool.core.io.readstore.CubeRS;
 import com.nus.cool.core.io.readstore.CubletRS;
-import com.nus.cool.core.io.readstore.HashMetaFieldRS;
 import com.nus.cool.core.io.readstore.MetaChunkRS;
+import com.nus.cool.core.io.readstore.MetaHashFieldRS;
 import com.nus.cool.core.io.storevector.InputVector;
 import com.nus.cool.core.schema.FieldSchema;
 import com.nus.cool.core.schema.TableSchema;
@@ -32,6 +32,7 @@ public class CoolTupleReader implements TupleReader {
 
   // only tuples of users emitted
   private final InputVector users;
+
 
   // initialized once
   private final int userKeyFieldIdx;
@@ -76,7 +77,7 @@ public class CoolTupleReader implements TupleReader {
     if (this.users != null && this.users.hasNext()) {
       curUser = this.users.next();
     }
-    this.userKeyFieldIdx = this.tableSchema.getUserKeyField();
+    this.userKeyFieldIdx = this.tableSchema.getUserKeyFieldIdx();
     this.chunkItr = datachunks.listIterator();
     this.curChunk = null;
     this.fields = new ArrayList<>();
@@ -108,7 +109,7 @@ public class CoolTupleReader implements TupleReader {
           case Action:
           case Segment:
             converters.add(new ValueConverter() {
-              private final HashMetaFieldRS valueVec = (HashMetaFieldRS) metaChunk.getMetaField(
+              private final MetaHashFieldRS valueVec = (MetaHashFieldRS) metaChunk.getMetaField(
                   fieldSchema.getName());
 
               @Override
@@ -119,7 +120,7 @@ public class CoolTupleReader implements TupleReader {
             break;
           case ActionTime:
             converters.add(new ValueConverter() {
-              private final DayIntConverter converter = new DayIntConverter();
+              private final DayIntConverter converter = DayIntConverter.getInstance();
 
               @Override
               public String convert(int value) {
@@ -150,8 +151,8 @@ public class CoolTupleReader implements TupleReader {
       return false;
     }
     curChunk = chunkItr.next();
-    curChunkUserItr = new KeyFieldIterator.Builder(
-        curChunk.getField(userKeyFieldIdx)).build().get();
+    curChunkUserItr = new KeyFieldIterator.Builder(curChunk.getField(userKeyFieldIdx)).build()
+        .get();
     fields.clear();
     for (FieldSchema fieldSchema : tableSchema.getFields()) {
       fields.add(curChunk.getField(fieldSchema.getName()).getValueVector());
@@ -175,8 +176,7 @@ public class CoolTupleReader implements TupleReader {
     // we have valid chunk user itr
     // looping users, when a chunk user itr reached the end,
     // switch to a new valid chunk
-    while (curChunkUserItr.next()
-        || (switchToNextChunk() && curChunkUserItr.next())) {
+    while (curChunkUserItr.next() || (switchToNextChunk() && curChunkUserItr.next())) {
 
       if (users != null) {
         if (curUser < 0) {

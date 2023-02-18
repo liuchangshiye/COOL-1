@@ -43,13 +43,8 @@ public class ZIntStoreTest {
     int count = numbers.length;
     int rawSize = count * codecByte(codeType);
 
-    Histogram hist = Histogram.builder()
-        .min(min)
-        .max(max)
-        .numOfValues(count)
-        .rawSize(rawSize)
-        .type(CompressType.KeyHash)
-        .build();
+    Histogram hist = Histogram.builder().min(min).max(max).numOfValues(count).rawSize(rawSize)
+        .type(CompressType.KeyHash).build();
     Compressor compressor = new ZIntCompressor(codeType, hist);
     int maxLen = compressor.maxCompressedLength();
     byte[] compressed = new byte[maxLen];
@@ -58,24 +53,23 @@ public class ZIntStoreTest {
     // load the bytes with
     ByteBuffer buffer = ByteBuffer.wrap(compressed);
     buffer.order(ByteOrder.nativeOrder());
-    int sz = buffer.getInt();
     ZIntStore store;
 
     switch (codeType) {
       case INT8:
-        store = new ZInt8Store(sz);
+        store = ZInt8Store.load(buffer);
         break;
       case INT16:
-        store = new ZInt16Store(sz);
+        store = ZInt16Store.load(buffer);
         break;
       case INT32:
         // INT32
-        store = new ZInt32Store(sz);
+        store = ZInt32Store.load(buffer);
         break;
       default:
         throw new IllegalArgumentException("Invalid INT code Type");
     }
-    store.readFrom(buffer);
+
     InputVector in = (InputVector) store;
 
     for (int i = 0; i < in.size(); i++) {

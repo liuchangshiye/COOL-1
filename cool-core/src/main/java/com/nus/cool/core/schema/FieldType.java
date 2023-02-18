@@ -84,8 +84,8 @@ public enum FieldType {
       case Action:
       case AppKey:
       case Segment:
-        return true;
       case UserKey:
+        return true;
       case ActionTime:
       case Metric:
         return false;

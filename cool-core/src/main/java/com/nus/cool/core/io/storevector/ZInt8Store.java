@@ -35,22 +35,29 @@ public class ZInt8Store implements InputVector, ZIntStore {
   /**
    * number of values.
    */
-  private int count;
+  private final int count;
+
+
+  private final boolean sorted;
 
   /**
    * compressed data.
    */
   private ByteBuffer buffer;
 
-  public ZInt8Store(int count) {
+  public ZInt8Store(int count, boolean sorted) {
     this.count = count;
+    this.sorted = sorted;
   }
 
   /**
    * Create input vector on a buffer that is ZInt8 encoded.
    */
-  public static ZIntStore load(ByteBuffer buffer, int n) {
-    ZIntStore store = new ZInt8Store(n);
+  public static ZIntStore load(ByteBuffer buffer) {
+    int n = buffer.getInt();
+    int flag = buffer.get(); // get byte into int
+    boolean sorted = flag == 1 ? true : false;
+    ZIntStore store = new ZInt8Store(n, sorted);
     store.readFrom(buffer);
     return store;
   }
@@ -65,7 +72,11 @@ public class ZInt8Store implements InputVector, ZIntStore {
     if (key > Byte.MAX_VALUE || key < 0) {
       return -1;
     }
-    return ByteBuffers.binarySearchUnsigned(this.buffer, 0, this.buffer.limit(), (byte) key);
+    if (this.sorted) {
+      return ByteBuffers.binarySearchUnsigned(this.buffer, 0, this.buffer.limit(), (byte) key);
+    } else {
+      return ByteBuffers.traverseSearch(this.buffer, 0, this.buffer.limit(), (byte) key);
+    }
   }
 
   @Override
