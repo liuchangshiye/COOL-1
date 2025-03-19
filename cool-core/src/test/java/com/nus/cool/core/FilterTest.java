@@ -3,6 +3,8 @@ package com.nus.cool.core;
 import com.nus.cool.core.cohort.filter.Filter;
 import com.nus.cool.core.cohort.filter.FilterLayout;
 import com.nus.cool.core.cohort.filter.RangeFilter;
+import com.nus.cool.core.field.IntRangeField;
+import com.nus.cool.core.field.StringHashField;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -15,7 +17,7 @@ public class FilterTest {
   public void rangeFilterAcceptUnitTest(FilterLayout fLayout, int[] inputs) {
     RangeFilter filter = (RangeFilter) fLayout.generateFilter();
     for (int i = 0; i < inputs.length; i++) {
-      Assert.assertTrue(filter.accept(inputs[i]));
+      Assert.assertTrue(filter.accept(new IntRangeField(inputs[i])));
     }
   }
 
@@ -23,7 +25,7 @@ public class FilterTest {
   public void rangeFilterRejectUnitTest(FilterLayout fLayout, int[] inputs) {
     RangeFilter filter = (RangeFilter) fLayout.generateFilter();
     for (int i = 0; i < inputs.length; i++) {
-      Assert.assertFalse(filter.accept(inputs[i]));
+      Assert.assertFalse(filter.accept(new IntRangeField(inputs[i])));
     }
   }
 
@@ -31,7 +33,7 @@ public class FilterTest {
   public void setFilterAcceptUnitTest(FilterLayout flayout, String[] inputs) {
     Filter filter = flayout.generateFilter();
     for (int i = 0; i < inputs.length; i++) {
-      Assert.assertTrue(filter.accept(inputs[i]));
+      Assert.assertTrue(filter.accept(new StringHashField(inputs[i])));
     }
   }
 
@@ -39,7 +41,7 @@ public class FilterTest {
   public void setFilterRejectUnitTest(FilterLayout flayout, String[] inputs) {
     Filter filter = flayout.generateFilter();
     for (int i = 0; i < inputs.length; i++) {
-      Assert.assertFalse(filter.accept(inputs[i]));
+      Assert.assertFalse(filter.accept(new StringHashField(inputs[i])));
     }
   }
 
@@ -83,7 +85,8 @@ public class FilterTest {
   public Object[][] generateRangeFilterAcceptInput() {
     return new Object[][] {
         {
-            new FilterLayout(false, new String[] { "MIN-15", "16-2000", "2555-MAX" }, null),
+            new FilterLayout(false, new String[] { "MIN to 15", "16 to 2000", "2555 to MAX" },
+                null),
             new int[] { 12, 55, 555555, 1999, 14, 16, 1999, 2555 } }
         };
   }
@@ -95,9 +98,9 @@ public class FilterTest {
   public Object[][] generateRangeFilterRejectInput() {
     return new Object[][] {
         {
-            new FilterLayout(false, new String[] { "MIN-15", "16-2000", "2555-MAX" }, null),
+            new FilterLayout(false, new String[] { "MIN to 15", "16 to 2000", "2555 to MAX" },
+                null),
             new int[] { 2001, 2222, 2244 } }
         };
   }
-
 }

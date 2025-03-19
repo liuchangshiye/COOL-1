@@ -19,8 +19,10 @@
 
 package com.nus.cool.functionality;
 
+import com.google.common.io.Files;
 import com.nus.cool.core.cohort.CohortProcessor;
 import com.nus.cool.core.cohort.CohortQueryLayout;
+import com.nus.cool.core.cohort.CohortWriter;
 import com.nus.cool.core.cohort.storage.CohortRet;
 import com.nus.cool.core.io.readstore.CubeRS;
 import com.nus.cool.model.CoolModel;
@@ -41,6 +43,7 @@ public class CohortSelection {
   public static String performCohortSelection(String cubeRepo, String queryPath)
       throws IOException {
     CohortQueryLayout layout = CohortQueryLayout.readFromJson(queryPath);
+    layout.initCohortQuery();
     CohortProcessor cohortProcessor = new CohortProcessor(layout);
 
     // start a new cool model and reload the cube
@@ -48,13 +51,27 @@ public class CohortSelection {
     coolModel.reload(cohortProcessor.getDataSource());
     CubeRS cube = coolModel.getCube(cohortProcessor.getDataSource());
 
+    CohortRet ret = cohortProcessor.process(cube);
+
     // get current dir path
     File currentVersion = coolModel.getLatestVersion(cohortProcessor.getDataSource());
-    CohortRet ret = cohortProcessor.process(cube);
-    String cohortStoragePath = cohortProcessor.persistCohort(currentVersion.toString());
+    String outputPath = currentVersion.toString() + "/cohort/" + layout.getQueryName();
+    CohortWriter.setUpOutputFolder(outputPath);
+    Files.copy(new File(queryPath), new File(outputPath + "/query.json"));;
+    CohortWriter.persistCohortResult(ret, outputPath);
+
+    if (layout.isSaveCohort()) {
+      if (layout.selectAll()) {
+        String cohortName = layout.getOutputCohort();
+        CohortWriter.persistOneCohort(ret, cohortName, outputPath);
+      } else {
+        CohortWriter.persistAllCohorts(ret, outputPath);
+      }
+    }
+
     coolModel.close();
 
-    return cohortStoragePath;
+    return outputPath;
   }
 
 

@@ -1,13 +1,20 @@
 package com.nus.cool.core.cohort.storage;
 
 import com.google.common.base.Preconditions;
+import com.nus.cool.core.cohort.CohortResultLayout;
 import com.nus.cool.core.cohort.ageselect.AgeSelectionLayout;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
-import lombok.Getter;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.json.JSONObject;
 
 /**
  * Class for Cohort Analysis Result We consider the Cohort Analysis Result as a
@@ -18,7 +25,7 @@ import lombok.Getter;
  */
 public class CohortRet {
 
-  private HashMap<String, Xaxis> cohortToValueList;
+  private final HashMap<String, Xaxis> cohortToValueList;
 
   private int min;
 
@@ -28,8 +35,23 @@ public class CohortRet {
 
   private int size;
 
-  @Getter
-  private final HashMap<String, List<String>> cohortToUserIdList = new HashMap<>();
+  private class UserList {
+    Set<String> added = new HashSet<>();
+    List<String> userSequence = new LinkedList<>();
+
+    int size() {
+      return userSequence.size();
+    }
+
+    void add(String user) {
+      if (!added.contains(user)) {
+        added.add(user);
+        userSequence.add(user);
+      }
+    }
+  }
+
+  private final Map<String, UserList> cohortToUserIdList = new HashMap<>();
 
   /**
    * Create a cohort ret with ageSelection.
@@ -65,7 +87,7 @@ public class CohortRet {
   }
 
   /**
-   * Initialize the missing intance Get the certain RetUnit, user can modify
+   * Initialize the missing instance Get the certain RetUnit, user can modify
    * RetUnit in place.
    */
   public RetUnit getByAge(String cohort, int age) {
@@ -82,7 +104,7 @@ public class CohortRet {
    */
   private int getCohortAge(int index) {
     Preconditions.checkArgument(index <= max && index >= min,
-        "input tuple didn't pass the ageSelection");
+        "input tuple didn't pass the ageSelection " + index + "min: " + min + "max: " + max);
     int offset = (index - this.min) / this.interval;
     return offset;
   }
@@ -133,8 +155,7 @@ public class CohortRet {
    */
   public void addUserid(String cohortName, String userId) {
     if (!this.cohortToUserIdList.containsKey(cohortName)) {
-      List<String> userIdList = new ArrayList<>();
-      this.cohortToUserIdList.put(cohortName, userIdList);
+      this.cohortToUserIdList.put(cohortName, new UserList());
     }
     this.cohortToUserIdList.get(cohortName).add(userId);
   }
@@ -161,6 +182,55 @@ public class CohortRet {
     return x.getValues();
   }
 
+  /**
+   * Prepare query result object that contains the mapping of cohort name and size.
+   */
+  public CohortResultLayout genResult() {
+    CohortResultLayout ret = new CohortResultLayout();
+    for (Map.Entry<String, UserList> e : this.cohortToUserIdList.entrySet()) {
+      ret.addOneCohortRes(e.getKey(), e.getValue().size());
+    }
+    return ret;
+  }
+
+  /**
+   * Prepare a cohort write store that is used to persist cohort user list.
+   *
+   * @param cohortName the picked cohort
+   * @return cohort write store that contains the selected cohort users.
+   */
+  public Optional<CohortWSStr> genCohortUser(String cohortName) {
+    return Optional.of(this.cohortToUserIdList.get(cohortName))
+      .map(x -> {
+        if (x.size() == 0) {
+          return null;
+        } else {
+          CohortWSStr c = new CohortWSStr();
+          c.addCubletResults(x.userSequence);
+          return c;
+        }
+      }); 
+  }
+
+
+  /**
+   * Prepare cohort write stores that for all non-empty cohort user list.
+   */
+  public Map<String, Optional<CohortWSStr>> genAllCohortUsers() {
+    return this.cohortToUserIdList.entrySet()
+               .stream()
+               .collect(Collectors.toMap(x -> x.getKey(),
+                  x -> {
+                    if (x.getValue().size() == 0) {
+                      return Optional.of(null);
+                    } else {
+                      CohortWSStr c = new CohortWSStr();
+                      c.addCubletResults(x.getValue().userSequence);
+                      return Optional.of(c);
+                    }
+                  }));
+  }
+
   @Override
   public String toString() {
     String ret =
@@ -177,5 +247,25 @@ public class CohortRet {
       ret += entry.getKey() + ":" + entry.getValue().toString() + "\n";
     }
     return ret;
+  }
+
+  /**
+   * return the JSON format.
+   */
+  public JSONObject toJson() {
+    HashMap<String, Object> out = new HashMap<>();
+    HashMap<String, Integer> format = new HashMap<>();
+    format.put("interval", interval);
+    format.put("max", max);
+    format.put("min", min);
+    format.put("size", size);
+    out.put("format", format);
+    HashMap<String, List<Integer>> results = new HashMap<>();
+    for (Entry<String, Xaxis> entry : this.cohortToValueList.entrySet()) {
+      results.put(entry.getKey(), entry.getValue().getValues());
+    }
+    out.put("results", results);
+    JSONObject obj = new JSONObject(out);
+    return obj;
   }
 }

@@ -1,19 +1,16 @@
 package com.nus.cool.core.cohort;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.Files;
 import com.nus.cool.core.cohort.ageselect.AgeSelection;
 import com.nus.cool.core.cohort.birthselect.BirthSelection;
 import com.nus.cool.core.cohort.cohortselect.CohortSelector;
-import com.nus.cool.core.cohort.filter.Filter;
-import com.nus.cool.core.cohort.filter.FilterType;
 import com.nus.cool.core.cohort.storage.CohortRSStr;
 import com.nus.cool.core.cohort.storage.CohortRet;
-import com.nus.cool.core.cohort.storage.CohortWSStr;
 import com.nus.cool.core.cohort.storage.ProjectedTuple;
 import com.nus.cool.core.cohort.storage.RetUnit;
 import com.nus.cool.core.cohort.utils.DateUtils;
 import com.nus.cool.core.cohort.valueselect.ValueSelection;
+import com.nus.cool.core.field.FieldValue;
 import com.nus.cool.core.io.readstore.ChunkRS;
 import com.nus.cool.core.io.readstore.CubeRS;
 import com.nus.cool.core.io.readstore.CubletRS;
@@ -22,26 +19,18 @@ import com.nus.cool.core.io.readstore.MetaFieldRS;
 import com.nus.cool.core.schema.FieldSchema;
 import com.nus.cool.core.schema.FieldType;
 import com.nus.cool.core.schema.TableSchema;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import lombok.Getter;
 
 /**
  * Cohort Query Processing Engine.
  */
 public class CohortProcessor {
-  private String queryName;
-
   private AgeSelection ageSelector;
 
   private ValueSelection valueSelector;
@@ -50,21 +39,16 @@ public class CohortProcessor {
 
   private BirthSelection birthSelector;
 
-  private final CohortQueryLayout layout;
+  @Getter
+  private final String dataSource;
 
   @Getter
-  private String dataSource;
+  private final String inputCohort;
 
-  @Getter
-  private String inputCohort;
-
-  @Getter
   private CohortRet result;
 
-  private final HashSet<String> projectedSchemaSet;
+  private final Set<String> projectedSchemaSet;
   // initialize cohort result write store
-
-  private final HashMap<String, CohortWSStr> cohortUserMapper = new HashMap<>();
 
   private ProjectedTuple tuple;
 
@@ -72,8 +56,7 @@ public class CohortProcessor {
 
   private String actionTimeSchema;
 
-  @Getter
-  private HashSet<String> previousCohortUsers = new HashSet<>();
+  private Set<String> previousCohortUsers = new HashSet<>();
 
   /**
    * Constructor.
@@ -81,30 +64,29 @@ public class CohortProcessor {
    * @param layout query layout
    */
   public CohortProcessor(CohortQueryLayout layout) {
-    this.layout = layout;
-    // get age selector
-    if (layout.getAgetSelectionLayout() != null) {
-      this.ageSelector = layout.getAgetSelectionLayout().generate();
-      this.result = new CohortRet(layout.getAgetSelectionLayout());
-    }
     // get birth selector
     if (layout.getBirthSelectionLayout() != null) {
       this.birthSelector = layout.getBirthSelectionLayout().generate();
     }
     // get cohort selector
     this.cohortSelector = layout.getCohortSelectionLayout().generate();
-    if (this.cohortSelector.getFilter().getType() == FilterType.ALL) {
-      this.result = new CohortRet();
+    this.result = new CohortRet();
+    // get age selector
+    if (layout.getAgeSelectionLayout() != null) {
+      this.ageSelector = layout.getAgeSelectionLayout().generate();
+      this.result = new CohortRet(layout.getAgeSelectionLayout());
     }
     // get value selector
     if (layout.getValueSelectionLayout() != null) {
       this.valueSelector = layout.getValueSelectionLayout().generate();
     }
-
     this.projectedSchemaSet = layout.getSchemaSet();
     this.dataSource = layout.getDataSource();
-    this.queryName = layout.getQueryName();
     this.inputCohort = layout.getInputCohort();
+  }
+
+  public int getInputCohortSize() {
+    return previousCohortUsers.size();
   }
 
   /**
@@ -130,88 +112,28 @@ public class CohortProcessor {
     for (CubletRS cublet : cube.getCublets()) {
       processCublet(cublet);
 
-      // record result user id list
-      for (Map.Entry<String, List<String>> ele : this.result.getCohortToUserIdList().entrySet()) {
-        String cohortName = ele.getKey();
-        List<String> users = ele.getValue();
-        if (!this.cohortUserMapper.containsKey(cohortName)) {
-          this.cohortUserMapper.put(cohortName, new CohortWSStr());
-        }
-        this.cohortUserMapper.get(cohortName).addCubletResults(users);
-      }
-      this.result.clearUserIds();
     }
     return this.result;
   }
 
   /**
-   * Persist cohort file .cohort to output disk to the same level with the .dz file.
-   * E,g. ../CubeRepo/health_raw/v00000012/cohort/queryName/all.cohort.
-   *
-   * @param outputDir the output file path
-   * @return The cohort result storage path
-   * @throws IOException IOException
-   */
-  public String persistCohort(String outputDir) throws IOException {
-
-    // 1. create folder named "cohort" under the current version
-    File cohortRes = new File(outputDir, "cohort/" + queryName);
-    if (!cohortRes.getParentFile().exists()) {
-      cohortRes.getParentFile().mkdir();
-    }
-    if (!cohortRes.exists()) {
-      cohortRes.mkdir();
-    }
-
-    // 2.store cohort result
-    CohortResultLayout cohortJsonContent = new CohortResultLayout();
-    cohortJsonContent.setCohortQuery(this.layout);
-
-    for (Map.Entry<String, CohortWSStr> ele : this.cohortUserMapper.entrySet()) {
-      String cohortName = ele.getKey();
-      String fileName = cohortName + ".cohort";
-      int cohortSize = ele.getValue().getNumUsers();
-      File cohortResFile = new File(cohortRes.toString(), fileName);
-      DataOutputStream out = new DataOutputStream(new FileOutputStream(cohortResFile));
-      ele.getValue().writeTo(out);
-      // update info
-      cohortJsonContent.addOneCohortRes(fileName, cohortName, cohortSize);
-    }
-
-    // 3. store the json file with cohort result, and original query.json
-    ObjectMapper mapper = new ObjectMapper();
-    String cohortJson = Paths.get(cohortRes.toString(), "query_res.json").toString();
-    mapper.writeValue(new File(cohortJson), cohortJsonContent);
-
-    return cohortRes.toString();
-  }
-
-  /**
-   * Read all cohorts from the results of a previous query,
+   * Read one cohort from the results of a previous query,
    * cohort is named cohortName.cohort, e,g. "1980-1990.cohort".
    * Where 1980-1990 is the cohortName in our cohort query for health-raw dataset.
    *
+   * @param cohortName name of the previous stored cohort.
    * @param cohortFolderPath the path to store the previous stored cohort.
    */
-  public void readQueryCohorts(String cohortFolderPath) throws IOException {
-    CohortRSStr crs = new CohortRSStr(StandardCharsets.UTF_8);
-
-    File file = new File(cohortFolderPath);
-    File[] fs = file.listFiles();
+  public void readOneCohort(String cohortName, String cohortFolderPath) throws IOException {
+    
+    // check folder
+    File folder = new File(cohortFolderPath);
+    File[] fs = folder.listFiles();
     if (fs == null) {
       return;
     }
-    for (File f : fs) {
-      int pointIndex = f.getName().lastIndexOf(".");
-      if (pointIndex == -1) {
-        continue;
-      }
-      String extension = f.getName().substring(pointIndex);
-      if (!f.isDirectory() && extension.equals(".cohort")) {
-        crs.readFrom(Files.map(f).order(ByteOrder.nativeOrder()));
-        this.previousCohortUsers.addAll(crs.getUsers());
-      }
-    }
+    File cohortFile = new File(folder, cohortName + ".cohort");
+    readOneCohort(cohortFile);
   }
 
   /**
@@ -244,7 +166,7 @@ public class CohortProcessor {
     }
     String extension = cohortFile.getName().substring(pointIndex);
     if (!cohortFile.isDirectory() && extension.equals(".cohort")) {
-      crs.readFrom(Files.map(cohortFile).order(ByteOrder.nativeOrder()));
+      crs.readFrom(Files.map(cohortFile));
       this.previousCohortUsers.addAll(crs.getUsers());
     }
   }
@@ -260,15 +182,16 @@ public class CohortProcessor {
     this.filterInit(metaChunk);
 
     // use MetaChunk to skip Cublet
-    if (!this.checkMetaChunk(metaChunk)) {
+    if (this.skipMetaChunk(metaChunk)) {
       return;
     }
 
     // Now start to pass the DataChunk
     for (ChunkRS chunk : cublet.getDataChunks()) {
-      if (this.checkDataChunk(chunk)) {
-        this.processDataChunk(chunk, metaChunk);
+      if (this.skipDataChunk(chunk)) {
+        continue;
       }
+      this.processDataChunk(chunk, metaChunk);
     }
   }
 
@@ -283,7 +206,7 @@ public class CohortProcessor {
     for (int i = 0; i < chunk.getRecords(); i++) {
       // load data into tuple
       for (String schema : this.projectedSchemaSet) {
-        int value = chunk.getField(schema).getValueByIndex(i);
+        FieldValue value = chunk.getField(schema).getValueByIndex(i);
         this.tuple.loadAttr(value, schema);
       }
 
@@ -297,52 +220,56 @@ public class CohortProcessor {
    */
   private void processTuple(MetaChunkRS metaChunk) {
     // For One Tuple, we firstly get the userId, and ActionTime
-    int userGlobalID = (int) tuple.getValueBySchema(this.userIdSchema);
+    int userGlobalID = tuple.getValueBySchema(this.userIdSchema).getInt();
     MetaFieldRS userMetaField = metaChunk.getMetaField(this.userIdSchema);
-    String userId = userMetaField.getString(userGlobalID);
+    // String userId = userMetaField.getString(userGlobalID);
+    String userId = userMetaField.get(userGlobalID).map(FieldValue::getString).orElse("");
 
     // only process the user in previous cohort.
+    // todo: nl why?
     if (!this.previousCohortUsers.isEmpty() && !previousCohortUsers.contains(userId)) {
       return;
     }
 
-    // TODO: there is an error in the following code
-    // Error: A user with only one record will never be birthed.
-    // Please check the CohortSelectionTest.java file
     LocalDateTime actionTime =
-        DateUtils.daysSinceEpoch((int) tuple.getValueBySchema(this.actionTimeSchema));
+        DateUtils.secondsSinceEpoch(tuple.getValueBySchema(this.actionTimeSchema).getInt());
     // check whether its birthEvent is selected
     if (!this.birthSelector.isUserSelected(userId)) {
-      // if birthEvent is not selected
-      this.birthSelector.selectEvent(userId, actionTime, this.tuple);
-    } else {
-      // the birthEvent is selected
-      // extract the cohort this tuple belong to
-      String cohortName = this.cohortSelector.selectCohort(this.tuple, metaChunk);
-      if (cohortName == null) {
-        // cohort is outofrange
+      boolean selected = this.birthSelector.selectEvent(userId, actionTime, this.tuple);
+      if (!selected || !this.birthSelector.isUserSelected(userId)) {
+        // if birthEvent is not selected, or birth event selected but user not born yet.
+        return;
+      } 
+    }
+    // user is born
+    // extract the cohort this tuple belong to
+    String cohortName = this.cohortSelector.selectCohort(this.tuple, metaChunk);
+    if (cohortName == null) {
+      // cohort is outofrange
+      return;
+    }
+    this.result.addUserid(cohortName, userId);
+
+    if (this.ageSelector != null && this.valueSelector != null) {
+      // do time_diff to generate age / get the BirthEvent Date
+      LocalDateTime birthTime = this.birthSelector.getUserBirthEventDate(userId);
+      
+      assert birthTime != null : "birthTime null";
+      assert actionTime != null : "actionTime null";
+      int age = this.ageSelector.generateAge(birthTime, actionTime);
+      if (age == AgeSelection.DefaultNullAge) {
+        // age is outofrange
         return;
       }
-      this.result.addUserid(cohortName, userId);
-
-      if (this.ageSelector != null && this.valueSelector != null) {
-        // do time_diff to generate age / get the BirthEvent Date
-        LocalDateTime birthTime = this.birthSelector.getUserBirthEventDate(userId);
-        int age = this.ageSelector.generateAge(birthTime, actionTime);
-        if (age == AgeSelection.DefaultNullAge) {
-          // age is outofrange
-          return;
-        }
-        if (!this.valueSelector.isSelected(this.tuple)) {
-          // value outofrange
-          return;
-        }
-        // Pass all above filter, we can store value into CohortRet
-        // get the temporary result for this CohortGroup and this age
-        RetUnit ret = this.result.getByAge(cohortName, age);
-
-        this.valueSelector.getAggregateFunc().calculate(ret, tuple);
+      if (!this.valueSelector.isSelected(this.tuple)) {
+        // value outofrange
+        return;
       }
+      // Pass all above filter, we can store value into CohortRet
+      // get the temporary result for this CohortGroup and this age
+      RetUnit ret = this.result.getByAge(cohortName, age);
+
+      this.valueSelector.getAggregateFunc().calculate(ret, tuple);
     }
   }
 
@@ -350,56 +277,25 @@ public class CohortProcessor {
    * Check if this cublet contains the required field.
    *
    * @param metaChunk hashMetaFields result
-   * @return true: this metaChunk is valid, false: this metaChunk is invalid.
+   * @return true: this metaChunk is skipped , false otherwise.
    */
-  private Boolean checkMetaChunk(MetaChunkRS metaChunk) {
-
+  private Boolean skipMetaChunk(MetaChunkRS metaChunk) {
     // 1. check birth selection
     // if the metaChunk contains all birth filter's accept value, then the metaChunk
     // is valid.
-    if (this.birthSelector.getBirthEvents() == null) {
-      return true;
-    }
-
-    for (Filter filter : this.birthSelector.getFilterList()) {
-      String checkedSchema = filter.getFilterSchema();
-      MetaFieldRS metaField = metaChunk.getMetaField(checkedSchema);
-      if (this.checkMetaField(metaField, filter)) {
-        return true;
-      }
-    }
-
     // 2. check birth selection
-    Filter cohortFilter = this.cohortSelector.getFilter();
-    String checkedSchema = cohortFilter.getFilterSchema();
-    MetaFieldRS metaField = metaChunk.getMetaField(checkedSchema);
-    if (this.checkMetaField(metaField, cohortFilter)) {
-      return true;
-    }
-
     // 3. check value Selector,
-    for (Filter ft : this.valueSelector.getFilterList()) {
-      String valueSchema = ft.getFilterSchema();
-      MetaFieldRS valueMetaField = metaChunk.getMetaField(valueSchema);
-      if (this.checkMetaField(valueMetaField, ft)) {
-        return true;
-      }
-    }
-    return false;
+    return birthSelector.maybeSkipMetaChunk(metaChunk)
+      && cohortSelector.maybeSkipMetaChunk(metaChunk)
+      && valueSelector.maybeSkipMetaChunk(metaChunk);
   }
 
-  /**
-   * Now is not implemented.
-   */
-  public Boolean checkMetaField(MetaFieldRS metaField, Filter ft) {
-    return true;
-  }
 
   /***
    * Now is not implemented.
    */
-  public Boolean checkDataChunk(ChunkRS chunk) {
-    return true;
+  public Boolean skipDataChunk(ChunkRS chunk) {
+    return false;
   }
 
   /**
@@ -409,19 +305,14 @@ public class CohortProcessor {
    */
   private void filterInit(MetaChunkRS metaChunkRS) {
     // init birthSelector
-    for (Filter filter : this.birthSelector.getFilterList()) {
-      filter.loadMetaInfo(metaChunkRS);
-    }
+    this.birthSelector.loadMetaInfo(metaChunkRS);
 
     // init cohort
-    this.cohortSelector.getFilter().loadMetaInfo(metaChunkRS);
+    this.cohortSelector.loadMetaInfo(metaChunkRS);
 
     // value age
     if (this.valueSelector != null) {
-      for (Filter filter : this.valueSelector.getFilterList()) {
-        filter.loadMetaInfo(metaChunkRS);
-      }
+      valueSelector.loadMetaInfo(metaChunkRS);
     }
-
   }
 }

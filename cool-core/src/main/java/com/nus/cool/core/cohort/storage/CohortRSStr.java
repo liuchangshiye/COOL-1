@@ -22,7 +22,6 @@ package com.nus.cool.core.cohort.storage;
 import com.nus.cool.core.io.Input;
 import com.nus.cool.core.io.storevector.InputVector;
 import com.nus.cool.core.io.storevector.InputVectorFactory;
-import com.nus.cool.core.io.storevector.LZ4InputVector;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -65,13 +64,17 @@ public class CohortRSStr implements Input {
 
   @Override
   public void readFrom(ByteBuffer buffer) {
-    InputVector vec = InputVectorFactory.readFrom(buffer);
-    LZ4InputVector valueVec = (LZ4InputVector) vec;
-    int valueCount = valueVec.size();
-    values = new ArrayList<>(valueCount);
-    for (int i = 0; i < valueCount; i++) {
-      String value = valueVec.getString(i, this.charset);
-      values.add(value);
+    try {
+      InputVector<String> valueVec =
+          InputVectorFactory.genStrFieldInputVector(buffer, this.charset);
+      int valueCount = valueVec.size();
+      values = new ArrayList<>(valueCount);
+      for (int i = 0; i < valueCount; i++) {
+        String value = valueVec.get(i);
+        values.add(value);
+      }
+    } catch (IllegalArgumentException e) {
+      System.out.println("invalid argument for cohort user loading");
     }
   }
 

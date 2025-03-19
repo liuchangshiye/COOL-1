@@ -1,12 +1,9 @@
 package com.nus.cool.functionality;
 
-import static com.nus.cool.functionality.CohortSelection.performCohortSelection;
-
 import com.google.common.io.Files;
 import com.nus.cool.core.cohort.storage.CohortRSStr;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.List;
@@ -40,11 +37,11 @@ public class CohortSelectionTest {
   public void cohortSelectionUnitTest(String cubeRepo, String queryPath, int cohortSize)
       throws IOException {
 
-    String cohortStoragePath = performCohortSelection(cubeRepo, queryPath);
+    String cohortStoragePath = CohortSelection.performCohortSelection(cubeRepo, queryPath);
 
     File cohortResFile = new File(cohortStoragePath, "all.cohort");
     CohortRSStr crs = new CohortRSStr(StandardCharsets.UTF_8);
-    crs.readFrom(Files.map(cohortResFile).order(ByteOrder.nativeOrder()));
+    crs.readFrom(Files.map(cohortResFile));
     List<String> redRes = crs.getUsers();
     Assert.assertEquals(redRes.size(), cohortSize);
   }
@@ -58,8 +55,7 @@ public class CohortSelectionTest {
         {Paths.get(System.getProperty("user.dir"), "..", "CubeRepo/TestCube").toString(),
             Paths.get(System.getProperty("user.dir"), "..",
                 "datasets/health_raw/sample_query_selection", "query.json").toString(),
-            // cohort size
-            8581, // TODO: should be 8592.
+            8592,
         }};
   }
 }
